@@ -245,9 +245,52 @@ async function sendOrderSuccessEmail(email, orderDetails) {
   }
 }
 
+async function sendOrderDeliveredEmail(email, orderDetails) {
+  const mailOptions = {
+    from: '"Parfum D\'Elite Delivery" <delivery@parfumdelite.com>',
+    to: email,
+    subject: `Your Order has been Delivered - Order ${orderDetails.reference}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: 'Playfair Display', serif; background-color: #050505; color: #ffffff; padding: 40px; }
+          .container { max-width: 600px; margin: 0 auto; border: 1px solid #C5A059; padding: 40px; background: #000; }
+          .gold { color: #C5A059; }
+          .order-box { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(197, 160, 89, 0.2); }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1 class="gold" style="text-align: center;">Delivery Confirmed</h1>
+          <p>Dear Connoisseur,</p>
+          <p>We are pleased to inform you that your selection has been delivered.</p>
+          <div class="order-box">
+            <p><strong>Order Reference:</strong> ${orderDetails.reference}</p>
+            <p><strong>Delivered To:</strong> ${orderDetails.address}</p>
+            <p><strong>Delivery Time:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          <p>We hope you enjoy your new fragrance. Thank you for choosing Parfum D'Elite.</p>
+          <p style="text-align: center; color: #888; margin-top: 40px;">PARFUM D'ELITE</p>
+        </div>
+      </body>
+      </html>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Delivery email sent to ${email}`);
+  } catch (error) {
+    console.error('Delivery email error:', error);
+  }
+}
+
 module.exports = {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendAIPersonalizedEmail,
-  sendOrderSuccessEmail
+  sendOrderSuccessEmail,
+  sendOrderDeliveredEmail
 };
