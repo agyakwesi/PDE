@@ -39,7 +39,7 @@ const orderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in-progress', 'submitted', 'in-review', 'success', 'failed', 'expired'],
+    enum: ['pending', 'in-progress', 'submitted', 'in-review', 'success', 'failed', 'expired', 'ready_for_pickup', 'out_for_delivery', 'delivered', 'cancelled'],
     default: 'pending'
   },
   paymentStatus: {
@@ -56,6 +56,15 @@ const orderSchema = new mongoose.Schema({
     postalCode: String,
     country: String,
     phone: String
+  },
+  driverId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  assignedAt: {
+    type: Date,
+    default: null
   },
   trackingNumber: {
     type: String,

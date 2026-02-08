@@ -25,3 +25,19 @@
 - **Python:** Use `pytest`.
 - **React:** Use `React Testing Library`.
 - **Constraint:** Do not mark a "refactor" task as complete until existing tests pass.
+# Agent Behavior Guidelines
+
+## 1. Negative Constraints (The "Do Not" List)
+* **NO Breaking Changes:** You must not break existing functionality. If a change risks breaking backward compatibility, you must stop and ask for permission.
+* **NO Unauthorized Dependencies:** Do not add new libraries or dependencies (e.g., npm packages, pip modules) unless explicitly requested.
+
+## 2. System Designer Reasoning
+* **Complete Lifecycle:** Do not just output the feature code. You must include requirements for:
+    * **Logging:** Structured logging for debugging.
+    * **Error Handling:** Graceful failure modes (no silent failures).
+    * **Security:** Input validation and sanitization.
+* **Self-Correction:** Before finalizing output, review your code against these requirements.
+
+## 3. Context Anchoring
+* **Match Existing Style:** Analyze the current codebase before writing. Mimic the existing patterns, naming conventions, and directory structure.
+* **Integration over Redesign:** Do not refactor unrelated code. Fit the new feature into the existing architecture.

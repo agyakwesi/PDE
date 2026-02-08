@@ -22,13 +22,36 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage }).single('video');
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'video/mp4',
+    'video/quicktime',
+    'video/x-m4v',
+    'video/webm',
+    'video/x-msvideo'
+  ];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only video files are allowed.'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit
+}).single('video');
 
 exports.uploadHeroVideo = (req, res) => {
   upload(req, res, async function (err) {
     if (err instanceof multer.MulterError) {
       return res.status(500).json({ error: err.message });
     } else if (err) {
+      if (err.message === 'Invalid file type. Only video files are allowed.') {
+        return res.status(400).json({ error: err.message });
+      }
       return res.status(500).json({ error: err.message });
     }
 
@@ -129,18 +152,7 @@ exports.getSalesOverTime = async (req, res) => {
 exports.getUsers = async (req, res) => {
   try {
     const users = await User.find().select('-password');
-    
-    // Force Super Admin flag for display and debugging
-    const usersWithSuperAdmin = users.map(user => {
-      if (user.email === 'agyakwesiadom@gmail.com') {
-        // Ensure it's set in the response object
-        return { ...user.toObject(), isSuperAdmin: true, isAdmin: true };
-      }
-      return user;
-    });
-
-    console.log('Users fetched:', usersWithSuperAdmin.map(u => ({ e: u.email, sa: u.isSuperAdmin, a: u.isAdmin })));
-    res.json(usersWithSuperAdmin);
+    res.json(users);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: error.message });
@@ -244,21 +256,28 @@ exports.updateStock = async (req, res) => {
 exports.updateUserRole = async (req, res) => {
   try {
     const { userId } = req.params;
-    const updates = req.body; // Expects { isAdmin, isTester, isVerified, isSuspended }
+    const updates = req.body; // Expects { isAdmin, isTester, isVerified, isSuspended, isSuperAdmin }
 
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Protect Super Admin
-    if (user.email === 'agyakwesiadom@gmail.com') {
-        // Ensure Super Admin status is always true
-        user.isSuperAdmin = true;
-        user.isAdmin = true;
-        // Prevent suspension or de-admining
-        if (updates.isSuspended === true || updates.isAdmin === false) {
-            return res.status(403).json({ error: 'Cannot modify Super Admin privileges' });
+    const requester = req.user;
+
+    // Only Super Admin can modify another Super Admin
+    if (user.isSuperAdmin && (!requester || !requester.isSuperAdmin)) {
+        return res.status(403).json({ error: 'Only Super Admins can modify other Super Admins' });
+    }
+
+    // Only Super Admin can promote someone to Super Admin
+    if (updates.hasOwnProperty('isSuperAdmin')) {
+        if (!requester || !requester.isSuperAdmin) {
+            return res.status(403).json({ error: 'Only Super Admins can promote users to Super Admin' });
+        }
+        user.isSuperAdmin = updates.isSuperAdmin;
+        if (user.isSuperAdmin) {
+            user.isAdmin = true; // Implicitly admin
         }
     }
 
@@ -296,7 +315,7 @@ exports.deleteUser = async (req, res) => {
         
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        if (user.email === 'agyakwesiadom@gmail.com' || user.isSuperAdmin) {
+        if (user.isSuperAdmin) {
             return res.status(403).json({ error: 'Cannot delete Super Admin' });
         }
 
@@ -311,7 +330,7 @@ exports.deleteUser = async (req, res) => {
 // Create User (Admin Action)
 exports.createUser = async (req, res) => {
     try {
-        const { username, email, password, isAdmin, isTester } = req.body;
+        const { username, email, password, isAdmin, isTester, isSuperAdmin } = req.body;
 
         // Check if user exists
         const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -319,6 +338,7 @@ exports.createUser = async (req, res) => {
             return res.status(400).json({ error: 'User already exists' });
         }
 
+        const argon2 = require('argon2');
         const hashedPassword = await argon2.hash(password);
 
         const user = new User({
@@ -330,7 +350,10 @@ exports.createUser = async (req, res) => {
             isVerified: true // Admin created users are verified
         });
 
-        if (email === 'agyakwesiadom@gmail.com') {
+        if (isSuperAdmin) {
+            if (!req.user || !req.user.isSuperAdmin) {
+                return res.status(403).json({ error: 'Only Super Admins can create Super Admins' });
+            }
             user.isSuperAdmin = true;
             user.isAdmin = true;
         }
