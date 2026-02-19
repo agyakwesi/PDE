@@ -31,9 +31,11 @@ const imageProxyRoutes = require('./routes/imageProxyRoutes');
 const app = express();
 app.use(cors({
   origin: [
+    "https://parfumdelite.tech",
+    "https://www.parfumdelite.tech",
     "https://pafum-d-elite.vercel.app",
     "http://localhost:5173",
-    "https://pafum-d-elite.onrender.com"
+    "https://pde-prs1.onrender.com"
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
