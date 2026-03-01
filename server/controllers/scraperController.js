@@ -1,4 +1,8 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// Add stealth plugin to evade anti-bot protections
+puppeteer.use(StealthPlugin());
 const cheerio = require('cheerio');
 const { callAI } = require('../services/aiHelpers');
 

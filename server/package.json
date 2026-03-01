@@ -29,6 +29,8 @@
     "nodemailer": "^7.0.10",
     "openai": "^6.21.0",
     "puppeteer": "^24.31.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5"
   },
