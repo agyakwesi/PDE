@@ -10,9 +10,10 @@ exports.scrapeFragrantica = async (req, res) => {
     return res.status(400).json({ error: "Invalid URL" });
   }
 
+  let browser;
   try {
     // Launch Puppeteer with args for Render/Production compatibility
-    const browser = await puppeteer.launch({
+    browser = await puppeteer.launch({
       headless: "new",
       args: [
         "--no-sandbox",
@@ -24,30 +25,36 @@ exports.scrapeFragrantica = async (req, res) => {
         "--disable-gpu"
       ]
     });
-    
+
     const page = await browser.newPage();
-    
+
     // Set a realistic User Agent
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
+
     // Disable request interception to ensure full page load (fixes missing elements)
     // await page.setRequestInterception(true); 
-    
+
     try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-        await page.waitForSelector('h1[itemprop="name"]', { timeout: 10000 });
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+      await page.waitForSelector('h1[itemprop="name"]', { timeout: 10000 });
     } catch (e) {
-        console.log("Navigation/Selector timeout, continuing with available content...");
+      console.log("Navigation/Selector timeout, continuing with available content...");
     }
-    
-    const content = await page.content();
+
+    let content;
+    try {
+      content = await page.content();
+    } catch (e) {
+      console.error("Failed to get page content (likely anti-bot protection):", e.message);
+      throw new Error("Anti-bot protection blocked scraping. Please try again.");
+    }
     const $ = cheerio.load(content);
 
     const name = $('h1[itemprop="name"]').text().replace(/for women and men/i, '').trim();
     const image = $('img[itemprop="image"]').attr('src');
     let description = $('div[itemprop="description"]').text().trim();
     const rating = $('span[itemprop="ratingValue"]').text().trim();
-    
+
     let gender = "Unisex";
     const titleText = $('h1[itemprop="name"]').text();
     if (titleText.includes("for women")) gender = "Female";
@@ -56,37 +63,37 @@ exports.scrapeFragrantica = async (req, res) => {
     // Pyramid Extraction
     let notes = "";
     const pyramidDivs = $('div[style*="flex-flow: wrap"][style*="justify-content: center"]');
-    
+
     if (pyramidDivs.length >= 3) {
-        // Assuming standard order: Top, Middle, Base
-        const getNotesFromDiv = (div) => {
-            const notesArr = [];
-            $(div).find('div').each((i, el) => {
-                const text = $(el).text().trim();
-                if (text) notesArr.push(text);
-            });
-            // Filter duplicates and empty
-            return [...new Set(notesArr)].filter(n => n.length > 1);
-        };
+      // Assuming standard order: Top, Middle, Base
+      const getNotesFromDiv = (div) => {
+        const notesArr = [];
+        $(div).find('div').each((i, el) => {
+          const text = $(el).text().trim();
+          if (text) notesArr.push(text);
+        });
+        // Filter duplicates and empty
+        return [...new Set(notesArr)].filter(n => n.length > 1);
+      };
 
-        const top = getNotesFromDiv(pyramidDivs.eq(0));
-        const middle = getNotesFromDiv(pyramidDivs.eq(1));
-        const base = getNotesFromDiv(pyramidDivs.eq(2));
+      const top = getNotesFromDiv(pyramidDivs.eq(0));
+      const middle = getNotesFromDiv(pyramidDivs.eq(1));
+      const base = getNotesFromDiv(pyramidDivs.eq(2));
 
-        if (top.length || middle.length || base.length) {
-            notes = `Top: ${top.join(', ')}; Heart: ${middle.join(', ')}; Base: ${base.join(', ')}`;
-        }
+      if (top.length || middle.length || base.length) {
+        notes = `Top: ${top.join(', ')}; Heart: ${middle.join(', ')}; Base: ${base.join(', ')}`;
+      }
     }
 
     // Fallback to Accords if Pyramid not found
     if (!notes) {
-        const notesList = [];
-        $('.accord-bar').each((i, el) => {
-            notesList.push($(el).text().trim());
-        });
-        notes = notesList.join(', ');
+      const notesList = [];
+      $('.accord-bar').each((i, el) => {
+        notesList.push($(el).text().trim());
+      });
+      notes = notesList.join(', ');
     }
-    
+
     // Enhanced perfumer extraction
     let perfumer = "Master Perfumer";
     const perfumerSelectors = [
@@ -96,7 +103,7 @@ exports.scrapeFragrantica = async (req, res) => {
       'div:contains("Perfumer:") + a',
       'p:contains("Nose:") a'
     ];
-    
+
     for (const selector of perfumerSelectors) {
       const found = $(selector).first().text().trim();
       if (found && found.length > 0 && found !== "Master Perfumer") {
@@ -117,7 +124,7 @@ exports.scrapeFragrantica = async (req, res) => {
 
         const systemPrompt = "You are a luxury perfume copywriter. Shorten perfume descriptions to 2-3 elegant sentences (max 150 words). Remove unnecessary details, keep only the essence, mood, and key notes. Be poetic but concise.";
         const userMessage = `Shorten this perfume description:\n\n${cleanDesc}`;
-        
+
         const aiResponse = await callAI(systemPrompt, userMessage, 0.7, 200);
         description = aiResponse || cleanDesc; // Fallback to cleanDesc if AI fails
       } catch (aiError) {
@@ -131,7 +138,7 @@ exports.scrapeFragrantica = async (req, res) => {
     try {
       const urlParts = url.split('/perfume/')[1].split('/');
       if (urlParts.length >= 1) {
-        brand = urlParts[0].replace(/-/g, ' '); 
+        brand = urlParts[0].replace(/-/g, ' ');
         brand = brand.replace(/\b\w/g, l => l.toUpperCase());
       }
     } catch (e) {
@@ -144,6 +151,9 @@ exports.scrapeFragrantica = async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error("Scraping Error:", error);
-    res.status(500).json({ error: "Failed to scrape data" });
+    if (browser) {
+      try { await browser.close(); } catch (e) { console.error("Error closing browser:", e); }
+    }
+    res.status(500).json({ error: error.message || "Failed to scrape data" });
   }
 };
